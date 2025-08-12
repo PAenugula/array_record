@@ -11,6 +11,14 @@ on:
       upload_wheels:
         required: true
         type: boolean
+  workflow_dispatch:
+    inputs:
+      pypi_project_url:
+        required: false
+        type: string
+      upload_wheels:
+        required: true
+        type: boolean
 
 defaults:
   run:

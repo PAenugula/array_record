@@ -24,6 +24,7 @@ limitations under the License.
 #include "absl/status/status.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
+#include "absl/strings/match.h"
 #include "cpp/array_record_reader.h"
 #include "cpp/array_record_writer.h"
 #include "cpp/thread_pool.h"
@@ -52,18 +53,13 @@ PYBIND11_MODULE(array_record_module, m) {
                throw py::value_error(
                    std::string(status_or_option.status().message()));
              }
-             riegeli::FileWriterBase::Options file_writer_options;
+             riegeli::FdWriterBase::Options file_writer_options;
              file_writer_options.set_buffer_size(size_t{16} << 20);
-             file::Options file_options;
-             if (kwargs.contains("file_options")) {
-               file_options = kwargs["file_options"].cast<file::Options>();
-             }
              // Release the GIL because IO is time consuming.
              py::gil_scoped_release scoped_release;
              return new array_record::ArrayRecordWriter(
-                 riegeli::Maker<riegeli::FileWriter>(
-                     path, std::move(file_options),
-                     std::move(file_writer_options)),
+                 riegeli::Maker<riegeli::FdWriter>(
+                     path, std::move(file_writer_options)),
                  status_or_option.value());
            }),
            py::arg("path"), py::arg("options") = "")
@@ -93,12 +89,8 @@ PYBIND11_MODULE(array_record_module, m) {
                throw py::value_error(
                    std::string(status_or_option.status().message()));
              }
-             riegeli::FileReaderBase::Options file_reader_options;
+             riegeli::FdReaderBase::Options file_reader_options;
              riegeli::GcsReader::Options gcs_reader_options;
-             file::Options file_options;
-             if (kwargs.contains("file_options")) {
-               file_options = kwargs["file_options"].cast<file::Options>();
-             }
              if (kwargs.contains("file_reader_buffer_size")) {
                auto file_reader_buffer_size =
                    kwargs["file_reader_buffer_size"].cast<int64_t>();
@@ -116,9 +108,8 @@ PYBIND11_MODULE(array_record_module, m) {
                    array_record::ArrayRecordGlobalPool());
              } else {
                return new array_record::ArrayRecordReader(
-                   riegeli::Maker<riegeli::FileReader>(
-                       path, std::move(file_options),
-                       std::move(file_reader_options)),
+                   riegeli::Maker<riegeli::FdReader>(
+                       path, std::move(file_reader_options)),
                    status_or_option.value(),
                    array_record::ArrayRecordGlobalPool());
              }
@@ -133,8 +124,6 @@ PYBIND11_MODULE(array_record_module, m) {
                file_reader_buffer_size: Optional size of the buffer (in bytes)
                  for the underlying file (Riegeli) reader. The default buffer
                  size is 1 MiB.
-               file_options: Optional file::Options to use for the underlying
-                 file (Riegeli) reader.
 
            options ::= option? ("," option?)*
            option ::=

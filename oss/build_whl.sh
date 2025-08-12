@@ -37,6 +37,7 @@ function main() {
 
   export USE_BAZEL_VERSION="${BAZEL_VERSION}"
   bazel clean
+  # bazel mod graph --include_unused --verbose
   bazel build ... --action_env MACOSX_DEPLOYMENT_TARGET='11.0' --action_env PYTHON_BIN_PATH="${PYTHON_BIN}"
   bazel test --verbose_failures --test_output=errors ... --action_env PYTHON_BIN_PATH="${PYTHON_BIN}"
 
