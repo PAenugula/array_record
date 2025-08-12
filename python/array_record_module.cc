@@ -34,6 +34,8 @@ limitations under the License.
 #include "riegeli/base/maker.h"
 #include "riegeli/bytes/fd_reader.h"
 #include "riegeli/bytes/fd_writer.h"
+#include "riegeli/gcs/gcs_object.h"
+#include "riegeli/gcs/gcs_reader.h"
 
 namespace py = pybind11;
 
@@ -50,10 +52,18 @@ PYBIND11_MODULE(array_record_module, m) {
                throw py::value_error(
                    std::string(status_or_option.status().message()));
              }
+             riegeli::FileWriterBase::Options file_writer_options;
+             file_writer_options.set_buffer_size(size_t{16} << 20);
+             file::Options file_options;
+             if (kwargs.contains("file_options")) {
+               file_options = kwargs["file_options"].cast<file::Options>();
+             }
              // Release the GIL because IO is time consuming.
              py::gil_scoped_release scoped_release;
              return new array_record::ArrayRecordWriter(
-                 riegeli::Maker<riegeli::FdWriter>(path),
+                 riegeli::Maker<riegeli::FileWriter>(
+                     path, std::move(file_options),
+                     std::move(file_writer_options)),
                  status_or_option.value());
            }),
            py::arg("path"), py::arg("options") = "")
@@ -83,19 +93,35 @@ PYBIND11_MODULE(array_record_module, m) {
                throw py::value_error(
                    std::string(status_or_option.status().message()));
              }
-             riegeli::FdReaderBase::Options file_reader_options;
+             riegeli::FileReaderBase::Options file_reader_options;
+             riegeli::GcsReader::Options gcs_reader_options;
+             file::Options file_options;
+             if (kwargs.contains("file_options")) {
+               file_options = kwargs["file_options"].cast<file::Options>();
+             }
              if (kwargs.contains("file_reader_buffer_size")) {
                auto file_reader_buffer_size =
                    kwargs["file_reader_buffer_size"].cast<int64_t>();
                file_reader_options.set_buffer_size(file_reader_buffer_size);
+               gcs_reader_options.set_buffer_size(file_reader_buffer_size);
              }
              // Release the GIL because IO is time consuming.
              py::gil_scoped_release scoped_release;
-             return new array_record::ArrayRecordReader(
-                 riegeli::Maker<riegeli::FdReader>(
-                     path, std::move(file_reader_options)),
-                 status_or_option.value(),
-                 array_record::ArrayRecordGlobalPool());
+             if (absl::StartsWith(path, "gs://")) {
+               return new array_record::ArrayRecordReader(
+                   riegeli::Maker<riegeli::GcsReader>(
+                       google::cloud::storage::Client(),
+                       riegeli::GcsObject(path), std::move(gcs_reader_options)),
+                   status_or_option.value(),
+                   array_record::ArrayRecordGlobalPool());
+             } else {
+               return new array_record::ArrayRecordReader(
+                   riegeli::Maker<riegeli::FileReader>(
+                       path, std::move(file_options),
+                       std::move(file_reader_options)),
+                   status_or_option.value(),
+                   array_record::ArrayRecordGlobalPool());
+             }
            }),
            py::arg("path"), py::arg("options") = "", R"(
            ArrayRecordReader for fast sequential or random access.
